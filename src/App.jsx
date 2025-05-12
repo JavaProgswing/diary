@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "@supabase/auth-helpers-react";
-import { API } from "./constants";
+
+const API = import.meta.env.VITE_API_URL;
 
 export default function App() {
   const session = useSession();
