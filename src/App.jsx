@@ -1,100 +1,124 @@
-
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
-import "./index.css";
-
-const API = import.meta.env.VITE_API_URL;
+import { useState, useEffect } from "react";
+import { useSession } from "@supabase/auth-helpers-react";
+import { API } from "./constants";
 
 export default function App() {
-  const [session, setSession] = useState(null);
+  const session = useSession();
   const [entries, setEntries] = useState([]);
-  const [note, setNote] = useState("");
+  const [input, setInput] = useState("");
+  const [importError, setImportError] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-  }, []);
+    if (!session) return;
+    const fetchEntries = async () => {
+      const token = session.access_token;
+      const res = await fetch(`${API}/entries`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setEntries(data);
+    };
+    fetchEntries();
+  }, [session]);
 
-  async function signIn() {
-    const { error } = await supabase.auth.signInWithOAuth({ provider: "github" });
-    if (error) alert(error.message);
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut();
-    setEntries([]);
-  }
-
-  async function fetchEntries() {
-    const token = session?.access_token;
-    if (!token) return;
-    const res = await fetch(`${API}/entries`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setEntries(await res.json());
-  }
-
-  async function addEntry() {
-    const token = session?.access_token;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const token = session.access_token;
     const res = await fetch(`${API}/entries`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ content: note })
+      body: JSON.stringify({ content: input }),
     });
-    setNote("");
-    await fetchEntries();
-  }
+    const data = await res.json();
+    setEntries([data, ...entries]);
+    setInput("");
+  };
 
-  async function deleteEntry(id) {
-    const token = session?.access_token;
+  const deleteEntry = async (id) => {
+    const token = session.access_token;
     await fetch(`${API}/entries/${id}`, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` },
     });
     setEntries(entries.filter((e) => e.id !== id));
-  }
+  };
 
-  useEffect(() => { if (session) fetchEntries(); }, [session]);
+  const importNotes = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  if (!session)
-    return (
-      <main className="flex flex-col items-center justify-center h-screen gap-4 p-6 bg-gradient-to-br from-purple-100 to-indigo-200">
-        <h1 className="text-4xl font-extrabold text-indigo-800">My Diary</h1>
-        <button onClick={signIn} className="bg-indigo-600 px-5 py-2 rounded text-white hover:bg-indigo-700">
-          Sign in with GitHub
-        </button>
-      </main>
-    );
+    const text = await file.text();
+    const token = session.access_token;
+
+    const noteRegex = /##### DATE: (\d{4}-\d{2}-\d{2}) ##########\n([\s\S]*?)\n##### END #######################/g;
+    const matches = Array.from(text.matchAll(noteRegex));
+
+    if (matches.length === 0) {
+      setImportError("Invalid format. Please use the correct note format.");
+      return;
+    }
+
+    for (const match of matches) {
+      const date = match[1];
+      const content = match[2].trim();
+      await fetch(`${API}/entries`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content, created_at: date }),
+      });
+    }
+
+    // Refetch entries
+    const res = await fetch(`${API}/entries`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json();
+    setEntries(data);
+    setImportError(null);
+  };
+
+  if (!session) return <p className="p-4">Please log in.</p>;
 
   return (
-    <main className="max-w-2xl mx-auto p-6 bg-white shadow-lg rounded-lg mt-10 space-y-4">
-      <header className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold text-indigo-700">My Diary</h1>
-        <button onClick={signOut} className="text-sm text-red-500 hover:underline">Sign out</button>
-      </header>
-
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        className="w-full border rounded-md p-3 h-32 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-        placeholder="Dear diary..."
-      />
-      <button
-        onClick={addEntry}
-        className="w-full bg-indigo-600 text-white rounded-md py-2 hover:bg-indigo-700 transition"
-      >
-        Save today’s entry
-      </button>
-
-      <hr className="my-6" />
+    <main className="max-w-2xl mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-4">My Diary</h1>
+      <form onSubmit={handleSubmit} className="mb-6">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className="w-full p-2 border rounded mb-2"
+          placeholder="Write something..."
+          rows={5}
+        ></textarea>
+        <button
+          type="submit"
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Save
+        </button>
+        <label className="block mt-4">
+          <span className="text-sm font-medium">Import notes:</span>
+          <input
+            type="file"
+            accept=".txt"
+            onChange={importNotes}
+            className="block mt-1"
+          />
+        </label>
+        {importError && <p className="text-red-600 mt-2">{importError}</p>}
+      </form>
       <ul className="space-y-4">
         {entries.map((e) => (
-          <li key={e.id} className="border p-4 rounded shadow flex justify-between items-start">
+          <li
+            key={e.id}
+            className="border p-4 rounded shadow flex justify-between items-start"
+          >
             <div>
               <time className="block text-xs text-gray-500">
                 {new Date(e.created_at).toLocaleString()}
