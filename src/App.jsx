@@ -27,116 +27,90 @@ export default function App() {
   /* ───────────────────── diary CRUD helpers ──────────────────────── */
   async function fetchEntries() {
     const token = session?.access_token;
-    if (!token) {
-      console.warn("No token available");
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API}/entries`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        }
-      });
-
-      const data = await res.json();
-
-      if (!Array.isArray(data)) {
-        console.error("Expected array from API, got:", data);
-        return;
-      }
-
-      setEntries(data);
-    } catch (err) {
-      console.error("Failed to fetch entries:", err);
-    }
+    if (!token) return;
+    const res = await fetch(`${API}/entries`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    setEntries(await res.json());
   }
 
   async function addEntry() {
     const token = session?.access_token;
-    if (!token) return;
+    const res = await fetch(`${API}/entries`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ content: note })
+    });
+    setNote("");
+    await fetchEntries();
+  }
 
-    try {
-      const res = await fetch(`${API}/entries`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ content: note })
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        console.error("Failed to add entry:", errorData);
-        return;
-      }
-
-      setNote("");
-      await fetchEntries();
-    } catch (err) {
-      console.error("Error posting entry:", err);
-    }
+  async function deleteEntry(id) {
+    const token = session?.access_token;
+    await fetch(`${API}/entries/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    fetchEntries();  // Refresh entries after deletion
   }
 
   /* fetch on login */
-  useEffect(() => {
-    if (session) fetchEntries();
-  }, [session]);
+  useEffect(() => { if (session) fetchEntries(); }, [session]);
 
   /* ────────────────────────────── UI ─────────────────────────────── */
   if (!session)
     return (
-      <main className="flex flex-col gap-4 p-8">
-        <h1 className="text-3xl font-bold">My Diary</h1>
-        <button
-          onClick={signIn}
-          className="bg-indigo-500 px-4 py-2 rounded text-white"
-        >
+      <main className="flex flex-col gap-4 p-8 bg-gray-100 min-h-screen">
+        <h1 className="text-4xl font-bold text-center text-indigo-600">My Diary</h1>
+        <button onClick={signIn} className="bg-indigo-500 px-6 py-3 rounded text-white text-lg mx-auto">
           Sign in with GitHub
         </button>
       </main>
     );
 
   return (
-    <main className="max-w-xl mx-auto p-6">
+    <main className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
       <header className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold">My Diary</h1>
-        <button onClick={signOut} className="underline text-sm">
-          Sign out
-        </button>
+        <h1 className="text-3xl font-semibold text-indigo-600">My Diary</h1>
+        <button onClick={signOut} className="underline text-sm text-indigo-600">Sign out</button>
       </header>
 
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        className="w-full border rounded p-2 h-32"
-        placeholder="Dear diary..."
+        className="w-full border rounded p-4 h-32 mb-4 text-lg"
+        placeholder="Write your thoughts..."
       />
       <button
         onClick={addEntry}
-        className="mt-2 bg-indigo-600 text-white rounded px-3 py-1"
+        className="mt-2 bg-indigo-600 text-white rounded px-6 py-2 text-lg"
       >
         Save today’s entry
       </button>
 
-      <hr className="my-6" />
+      <hr className="my-6 border-t-2 border-indigo-100" />
 
-      {entries.length === 0 ? (
-        <p className="text-gray-500 text-sm">No entries yet.</p>
-      ) : (
-        <ul className="space-y-4">
-          {entries.map((e) => (
-            <li key={e.id} className="border p-4 rounded shadow">
-              <time className="block text-xs text-gray-500">
+      <ul className="space-y-4">
+        {entries.map((e) => (
+          <li key={e.id} className="border p-6 rounded-lg shadow-lg bg-gray-50">
+            <div className="flex justify-between items-center mb-2">
+              <time className="text-xs text-gray-500">
                 {new Date(e.created_at).toLocaleString()}
               </time>
-              <p className="whitespace-pre-wrap">{e.content}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+              <button
+                onClick={() => deleteEntry(e.id)}
+                className="bg-red-600 text-white px-3 py-1 rounded text-sm"
+              >
+                Delete
+              </button>
+            </div>
+            <p className="whitespace-pre-wrap text-lg text-gray-700">{e.content}</p>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }
