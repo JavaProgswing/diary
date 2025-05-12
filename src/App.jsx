@@ -48,6 +48,17 @@ export default function App() {
     await fetchEntries();
   }
 
+  async function deleteEntry(id) {
+    const token = session?.access_token;
+    await fetch(`${API}/entries/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    setEntries(entries.filter((e) => e.id !== id));
+  }
+
   useEffect(() => { if (session) fetchEntries(); }, [session]);
 
   if (!session)
@@ -83,11 +94,19 @@ export default function App() {
       <hr className="my-6" />
       <ul className="space-y-4">
         {entries.map((e) => (
-          <li key={e.id} className="border p-4 rounded shadow-sm bg-gray-50">
-            <time className="block text-xs text-gray-500">
-              {new Date(e.created_at).toLocaleString()}
-            </time>
-            <p className="whitespace-pre-wrap mt-2 text-gray-700">{e.content}</p>
+          <li key={e.id} className="border p-4 rounded shadow flex justify-between items-start">
+            <div>
+              <time className="block text-xs text-gray-500">
+                {new Date(e.created_at).toLocaleString()}
+              </time>
+              <p className="whitespace-pre-wrap">{e.content}</p>
+            </div>
+            <button
+              onClick={() => deleteEntry(e.id)}
+              className="ml-4 text-sm text-red-500 hover:underline"
+            >
+              Delete
+            </button>
           </li>
         ))}
       </ul>
