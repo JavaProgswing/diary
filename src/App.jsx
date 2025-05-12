@@ -27,36 +27,73 @@ export default function App() {
   /* ───────────────────── diary CRUD helpers ──────────────────────── */
   async function fetchEntries() {
     const token = session?.access_token;
-    if (!token) return;
-    const res = await fetch(`${API}/entries`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setEntries(await res.json());
+    if (!token) {
+      console.warn("No token available");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/entries`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      const data = await res.json();
+
+      if (!Array.isArray(data)) {
+        console.error("Expected array from API, got:", data);
+        return;
+      }
+
+      setEntries(data);
+    } catch (err) {
+      console.error("Failed to fetch entries:", err);
+    }
   }
 
   async function addEntry() {
     const token = session?.access_token;
-    const res = await fetch(`${API}/entries`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ content: note })
-    });
-    setNote("");
-    await fetchEntries();
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API}/entries`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: note })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error("Failed to add entry:", errorData);
+        return;
+      }
+
+      setNote("");
+      await fetchEntries();
+    } catch (err) {
+      console.error("Error posting entry:", err);
+    }
   }
 
   /* fetch on login */
-  useEffect(() => { if (session) fetchEntries(); }, [session]);
+  useEffect(() => {
+    if (session) fetchEntries();
+  }, [session]);
 
   /* ────────────────────────────── UI ─────────────────────────────── */
   if (!session)
     return (
       <main className="flex flex-col gap-4 p-8">
         <h1 className="text-3xl font-bold">My Diary</h1>
-        <button onClick={signIn} className="bg-indigo-500 px-4 py-2 rounded text-white">
+        <button
+          onClick={signIn}
+          className="bg-indigo-500 px-4 py-2 rounded text-white"
+        >
           Sign in with GitHub
         </button>
       </main>
@@ -66,7 +103,9 @@ export default function App() {
     <main className="max-w-xl mx-auto p-6">
       <header className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">My Diary</h1>
-        <button onClick={signOut} className="underline text-sm">Sign out</button>
+        <button onClick={signOut} className="underline text-sm">
+          Sign out
+        </button>
       </header>
 
       <textarea
@@ -83,16 +122,21 @@ export default function App() {
       </button>
 
       <hr className="my-6" />
-      <ul className="space-y-4">
-        {entries.map((e) => (
-          <li key={e.id} className="border p-4 rounded shadow">
-            <time className="block text-xs text-gray-500">
-              {new Date(e.created_at).toLocaleString()}
-            </time>
-            <p className="whitespace-pre-wrap">{e.content}</p>
-          </li>
-        ))}
-      </ul>
+
+      {entries.length === 0 ? (
+        <p className="text-gray-500 text-sm">No entries yet.</p>
+      ) : (
+        <ul className="space-y-4">
+          {entries.map((e) => (
+            <li key={e.id} className="border p-4 rounded shadow">
+              <time className="block text-xs text-gray-500">
+                {new Date(e.created_at).toLocaleString()}
+              </time>
+              <p className="whitespace-pre-wrap">{e.content}</p>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
